@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"lgocommon/utils"
+	"gopkg.in/mgo.v2/bson"
 )
 
 type FM struct {
@@ -22,7 +23,11 @@ func NewFm() *FM {
 	return fm
 }
 
-func (fm *FM) Read(path string) {
+/**
+ * 读入某路径下的所有文件
+ */
+func (fm *FM) Read(path string) []FileInfo{
+	files := make([]FileInfo,0)
 	err := filepath.Walk(path,
 		func(path string, f os.FileInfo, err error) error {
 			if f == nil {
@@ -33,16 +38,33 @@ func (fm *FM) Read(path string) {
 			}
 			fInfo := NewFileInfo()
 			fm.GetFileMetaInfo(path, fInfo)
-			fm.di.GetMongoDB().DB("local").C("files").Insert(fInfo)
-			fm.total++
-			fm.tool.Logging("INFO", " file :"+path+" done")
+			files = append(files,*fInfo)
 			return nil
 		})
 	if err != nil {
 		fmt.Printf("filepath.Walk() returned %v \n", err)
 	}
+	return files
+}
+/**
+ * 保存文件信息
+ */
+func (fm *FM) SaveFileInfo(files []FileInfo){
+	for _,file := range files{
+		fm.di.GetMongoDB().DB("local").C("files").Insert(file)
+		fm.total++
+		fm.tool.Logging("INFO", " file :"+file.Path+" done")
+	}
 }
 
+func (fm *FM) SaveFileInfos(path string) {
+	files := fm.Read(path)
+	fm.SaveFileInfo(files)
+}
+
+/**
+ * 获取文件信息
+ */
 func (fm *FM) GetFileMetaInfo(path string, finfo *FileInfo) bool {
 	info, _ := os.Stat(path)
 	data, _ := ioutil.ReadFile(path)
@@ -68,18 +90,38 @@ func (fm *FM) Remove(path string) {
 	fm.tool.Logging("INFO"," Remove "+path)
 }
 
+/**
+ * 扫描某文件夹的信息
+ */
 func (fm *FM) Scan(filepath string) {
 	fm.total = 0
 	// 将文件夹读入数据库 
-	fm.Read(filepath)
+	fm.SaveFileInfos(filepath)
 	fm.tool.Logging("INFO", fmt.Sprintf(" Reading files success, total: %d ",fm.total))
 }
 
+/**
+ * 对某文件夹进行更新
+ */
 func (fm *FM) Apply(filepath string) {
-	// 查找文件路径下的文件信息
-	// db := fm.di.GetMongoDB().DB("local").C("files")
+	db := fm.di.GetMongoDB().DB("local").C("files")
 
-	// fmt.Println(db.Find())
+	// 查找文件路径下的旧文件信息
+	var files []FileInfo
+	condition := bson.M{"path":bson.M{"$regex":filepath}}
+	db.Find(condition).All(&files)
+	for _,a := range files{
+		if a.Path != a.NewPath{
+			fm.Rename(a.Path,a.NewPath)
+		}
+	}
+	// 清空旧数据库文件信息
+	db.RemoveAll(condition)
+	// 重新导入
+	fm.Scan(filepath)
+}
 
-	// 按照新的文件进行移动和更名处理
+func (fm *FM) ClearAll() {
+	db := fm.di.GetMongoDB().DB("local").C("files")
+	db.RemoveAll(bson.M{})
 }
