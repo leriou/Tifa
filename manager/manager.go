@@ -8,19 +8,28 @@ import (
 	"path/filepath"
 	"lgocommon/utils"
 	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/mgo.v2"
 )
 
 type FM struct {
 	di   *utils.Di
 	tool *utils.Tool
+	db  *mgo.Collection
 	total int
+	hidden bool
 }
 
 func NewFm() *FM {
 	fm := new(FM)
 	fm.di = utils.NewDi()
 	fm.tool = utils.NewTool()
+	fm.db = fm.di.GetMongoDB().DB("local").C("files")
+	fm.hidden = true
 	return fm
+}
+
+func (fm *FM) SetHidden(flag bool){
+	fm.hidden = flag
 }
 
 /**
@@ -34,6 +43,10 @@ func (fm *FM) Read(path string) []FileInfo{
 				return err
 			}
 			if f.IsDir() {
+				return nil
+			}
+
+			if (fm.hidden && len(fm.tool.Regex("/\\.",path)) > 0 ) {
 				return nil
 			}
 			fInfo := NewFileInfo()
@@ -51,7 +64,7 @@ func (fm *FM) Read(path string) []FileInfo{
  */
 func (fm *FM) SaveFileInfo(files []FileInfo){
 	for _,file := range files{
-		fm.di.GetMongoDB().DB("local").C("files").Insert(file)
+		fm.db.Insert(file)
 		fm.total++
 		fm.tool.Logging("INFO", " file :"+file.Path+" done")
 	}
@@ -104,24 +117,26 @@ func (fm *FM) Scan(filepath string) {
  * 对某文件夹进行更新
  */
 func (fm *FM) Apply(filepath string) {
-	db := fm.di.GetMongoDB().DB("local").C("files")
-
 	// 查找文件路径下的旧文件信息
 	var files []FileInfo
 	condition := bson.M{"path":bson.M{"$regex":filepath}}
-	db.Find(condition).All(&files)
+	fm.db.Find(condition).All(&files)
 	for _,a := range files{
 		if a.Path != a.NewPath{
 			fm.Rename(a.Path,a.NewPath)
 		}
 	}
 	// 清空旧数据库文件信息
-	db.RemoveAll(condition)
+	fm.ClearPath(filepath)
 	// 重新导入
 	fm.Scan(filepath)
+	//fm.ClearAll()
+}
+
+func (fm *FM) ClearPath(path string) {
+	fm.db.RemoveAll(bson.M{"path":bson.M{"$regex":path}})
 }
 
 func (fm *FM) ClearAll() {
-	db := fm.di.GetMongoDB().DB("local").C("files")
-	db.RemoveAll(bson.M{})
+	fm.db.RemoveAll(bson.M{})
 }
