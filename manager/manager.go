@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"lgocommon/utils"
+	"Sephiroth/utils"
 	"gopkg.in/mgo.v2/bson"
 	"gopkg.in/mgo.v2"
 )
