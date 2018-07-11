@@ -136,7 +136,9 @@ func (fm *FM) Apply(filepath string) {
 func (fm *FM) ClearPath(path string) {
 	fm.db.RemoveAll(bson.M{"path":bson.M{"$regex":path}})
 }
-
+/**
+ * 清理所有文件
+ */
 func (fm *FM) ClearAll() {
 	fm.db.RemoveAll(bson.M{})
 }
