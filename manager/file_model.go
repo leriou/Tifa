@@ -5,7 +5,7 @@ type FileInfo struct {
 	IsDir   bool
 	Name    string
 	Mode    string
-	Size    int64
+	Size    float64
 	Md5     string
 	Path    string
 	NewPath string
