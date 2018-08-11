@@ -10,6 +10,7 @@ type FileInfo struct {
 	Path    string
 	NewPath string
 	Applied bool
+	UpTime  string
 }
 
 func NewFileInfo() *FileInfo {

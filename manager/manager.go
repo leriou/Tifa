@@ -13,6 +13,7 @@ import (
 
 type FM struct {
 	di   *utils.Di
+	Tool *utils.Tool
 	tool *utils.Tool
 	db  *mgo.Collection
 	total int
@@ -29,6 +30,7 @@ func NewFm() *FM {
 	fm := new(FM)
 	fm.di = utils.NewDi()
 	fm.tool = utils.NewTool()
+	fm.Tool = fm.tool
 	fm.db = fm.di.GetMongoDB().DB("local").C("files")
 	fm.hidden = DISPLAY_HIDDEN_FILE_DEFAULT
 	return fm
@@ -37,8 +39,6 @@ func NewFm() *FM {
 func (fm *FM) SetHidden(flag bool){
 	fm.hidden = flag
 }
-
-
 
 func (fm *FM) Rename(old, new string) {
 	os.Rename(old, new)
@@ -70,6 +70,7 @@ func (fm *FM) SaveFileInfos(path string) {
  */
  func (fm *FM) ReadFileFromPath(path string) []FileInfo{
 	files := make([]FileInfo,0)
+	paths := make([]string,0)
 	err := filepath.Walk(path,
 		func(path string, f os.FileInfo, err error) error {
 			if f == nil {
@@ -78,17 +79,21 @@ func (fm *FM) SaveFileInfos(path string) {
 			if f.IsDir() {
 				return nil
 			}
-
 			if (!fm.hidden && len(fm.tool.Regex("/\\.",path)) > 0 ) {
 				return nil
 			}
-			fInfo := NewFileInfo()
-			go (fm.GetFileMetaInfo(path, fInfo))
-			files = append(files,*fInfo)
+			paths = append(paths,path)
 			return nil
 		})
 	if err != nil {
 		fmt.Printf("filepath.Walk() returned %v \n", err)
+	}
+	ch := make(chan FileInfo)
+	for _,path := range(paths){
+		go fm.GetFileMetaInfo(path,ch)
+	}
+	for i := 0;i<len(paths);i++ {
+		files = append(files,<-ch)
 	}
 	return files
 }
@@ -96,9 +101,10 @@ func (fm *FM) SaveFileInfos(path string) {
 /**
  * 获取文件信息
  */
- func (fm *FM) GetFileMetaInfo(path string, finfo *FileInfo) bool {
+ func (fm *FM) GetFileMetaInfo(path string, ch chan FileInfo) {
 	info, _ := os.Stat(path)
 	data, _ := ioutil.ReadFile(path)
+	finfo := NewFileInfo()
 	finfo.Md5 = fmt.Sprintf("%x", md5.Sum(data))                 // md5
 	finfo.ModTime = info.ModTime().Format("2006-01-02 15:04:05") // 修改时间
 	finfo.IsDir = info.IsDir()                                   // 是否目录
@@ -108,9 +114,9 @@ func (fm *FM) SaveFileInfos(path string) {
 	finfo.Applied = APPLIED_DEFAULT
 	finfo.Path = path
 	finfo.NewPath = path
-	return true
+	finfo.UpTime = fm.tool.GetTime()
+	ch <- *finfo
 }
-
 
 /**
  * 保存文件信息
@@ -118,19 +124,18 @@ func (fm *FM) SaveFileInfos(path string) {
  func (fm *FM) SaveFileInfo(files []FileInfo){
 	for _,file := range files{
 		// 检查文件是否重复, 重复则更新,否则插入
-		var fp []FileInfo
+		var dbfiles []FileInfo
 		condition := bson.M{"md5":file.Md5,"path":file.Path}
-		fm.db.Find(condition).All(&fp)
-		if len(fp) > 0 {
-			for _,item := range fp {
-				fmt.Println(item)
-				// fm.db.Update(bson.M{"_id":fp._id},item)
+		fm.db.Find(condition).All(&dbfiles)
+		if len(dbfiles) > 0 {
+			for _,item := range dbfiles {
+				file.UpTime = fm.tool.GetTime()
+				fm.db.Update(bson.M{"path":item.Path},file)
 			}
-			
 		} else {
 			fm.db.Insert(file)
 			fm.total++
-			fm.tool.Logging("INFO", " file :"+file.Path+" done")
+			fm.tool.Logging("INFO", " file: " + file.Path + " done")
 		}
 	}
 }
