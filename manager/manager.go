@@ -92,7 +92,7 @@ func (fm *FM) SaveFileInfos(path string) {
 	for _,path := range(paths){
 		go fm.GetFileMetaInfo(path,ch)
 	}
-	for i := 0;i<len(paths);i++ {
+	for i := 0; i < len(paths); i++ {
 		files = append(files,<-ch)
 	}
 	return files
@@ -111,8 +111,8 @@ func (fm *FM) SaveFileInfos(path string) {
 	finfo.Mode = fmt.Sprintf("%s", info.Mode())                  // 文件权限
 	finfo.Name = info.Name()                                     // 文件名
 	finfo.Size = float64(info.Size())/1024                       // 文件大小
-	finfo.Applied = APPLIED_DEFAULT
-	finfo.Path = path
+	finfo.Applied = APPLIED_DEFAULT                              // 是否被更新过
+	finfo.Path = path                                            // 文件路径
 	finfo.NewPath = path
 	finfo.UpTime = fm.tool.GetTime()
 	ch <- *finfo
