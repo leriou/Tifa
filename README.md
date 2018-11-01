@@ -24,5 +24,3 @@
 
 `go run main.go scan /xxxx/path`
 
-# 待办事项
-1. 是否添加隐藏文件 (.开头)
