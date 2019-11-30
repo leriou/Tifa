@@ -22,5 +22,4 @@
 
 # 使用方式
 
-`go run main.go scan /xxxx/path`
-
+`go run src/main.go scan /xxxx/path`
